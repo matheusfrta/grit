@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "grit"
+version = "0.1.0"
+description = "resilience toolkit: retry, circuit breaker, timeout, rate limit, bulkhead, fallback"
+requires-python = ">=3.8"
+dependencies = []
+
+[tool.setuptools.packages.find]
+include = ["grit*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
