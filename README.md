@@ -43,7 +43,7 @@ Return fallback values or cached data when downstream calls fail, giving users a
 ## Installation
 
 ```bash
-pip install grit
+pip install pygrit
 ```
 
 ## Usage Examples

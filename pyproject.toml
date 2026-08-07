@@ -3,7 +3,7 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "grit"
+name = "pygrit"
 version = "0.1.0"
 description = "resilience toolkit: retry, circuit breaker, timeout, rate limit, bulkhead, fallback"
 requires-python = ">=3.8"
