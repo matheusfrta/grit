@@ -21,37 +21,42 @@ class limiter:
         self.tokens = min(self.burst, self.tokens + (now - self.ts) * self.rate / self.per)
         self.ts = now
 
-    def _take(self):
+    def _take(self, timeout=None):
         with self.lock:
             self._refill()
             if self.tokens >= 1:
                 self.tokens -= 1
                 return 0.0
-            return (1 - self.tokens) * self.per / self.rate
+
+            delay = (1 - self.tokens) * self.per / self.rate
+            if timeout is not None and delay > timeout:
+                return -1.0
+
+            self.tokens -= 1
+            return delay
 
     def acquire(self, blocking=True, timeout=None):
-        waited = 0.0
-        while True:
-            delay = self._take()
-            if delay <= 0:
-                return True
+        if not blocking:
+            delay = self._take(0.0)
+        else:
+            delay = self._take(timeout)
+            
+        if delay < 0:
             if not blocking:
                 return False
-            if timeout is not None and waited + delay > timeout:
-                raise LimitExceeded(timeout)
+            raise LimitExceeded(timeout)
+            
+        if delay > 0:
             time.sleep(delay)
-            waited += delay
+        return True
 
     async def acquire_async(self, timeout=None):
-        waited = 0.0
-        while True:
-            delay = self._take()
-            if delay <= 0:
-                return True
-            if timeout is not None and waited + delay > timeout:
-                raise LimitExceeded(timeout)
+        delay = self._take(timeout)
+        if delay < 0:
+            raise LimitExceeded(timeout)
+        if delay > 0:
             await asyncio.sleep(delay)
-            waited += delay
+        return True
 
     def __call__(self, fn):
         if inspect.iscoroutinefunction(fn):
