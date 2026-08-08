@@ -15,59 +15,99 @@ class limiter:
         self.tokens = float(self.burst)
         self.ts = time.monotonic()
         self.lock = threading.Lock()
+        
+        self.queue = {}
+        self.next_id = 0
 
     def _refill(self):
         now = time.monotonic()
         self.tokens = min(self.burst, self.tokens + (now - self.ts) * self.rate / self.per)
         self.ts = now
 
-    def _take(self, timeout=None):
+    def _get_ticket(self):
+        with self.lock:
+            tid = self.next_id
+            self.next_id += 1
+            self.queue[tid] = None
+            return tid
+
+    def _check(self, tid):
         with self.lock:
             self._refill()
-            if self.tokens >= 1:
+            first = next(iter(self.queue)) if self.queue else None
+            
+            if first == tid and self.tokens >= 1:
+                del self.queue[tid]
                 self.tokens -= 1
-                return 0.0
+                return True, 0.0
+            
+            ahead = 0
+            for k in self.queue:
+                if k == tid:
+                    break
+                ahead += 1
+                
+            deficit = max(0.0, (ahead + 1) - self.tokens)
+            delay = deficit * self.per / self.rate
+            if delay <= 0:
+                delay = 0.01 
+            return False, delay
 
-            delay = (1 - self.tokens) * self.per / self.rate
-            if timeout is not None and delay > timeout:
-                return -1.0
-
-            self.tokens -= 1
-            return delay
+    def _cancel(self, tid):
+        with self.lock:
+            self.queue.pop(tid, None)
 
     def acquire(self, blocking=True, timeout=None):
-        if not blocking:
-            delay = self._take(0.0)
-        else:
-            delay = self._take(timeout)
-            
-        if delay < 0:
+        tid = self._get_ticket()
+        start = time.monotonic()
+        
+        while True:
+            got_it, delay = self._check(tid)
+            if got_it:
+                return True
+                
             if not blocking:
+                self._cancel(tid)
                 return False
-            raise LimitExceeded(timeout)
-            
-        if delay > 0:
+                
+            elapsed = time.monotonic() - start
+            if timeout is not None and elapsed >= timeout:
+                self._cancel(tid)
+                raise LimitExceeded(timeout)
+                
+            sleep_time = min(delay, 0.05)
+            if timeout is not None:
+                sleep_time = min(sleep_time, max(0.0, timeout - elapsed))
+                
             try:
-                time.sleep(delay)
+                time.sleep(sleep_time)
             except BaseException:
-                with self.lock:
-                    self.tokens = min(self.burst, self.tokens + 1)
+                self._cancel(tid)
                 raise
-        return True
 
     async def acquire_async(self, timeout=None):
-        delay = self._take(timeout)
-        if delay < 0:
-            raise LimitExceeded(timeout)
-            
-        if delay > 0:
+        tid = self._get_ticket()
+        start = time.monotonic()
+        
+        while True:
+            got_it, delay = self._check(tid)
+            if got_it:
+                return True
+                
+            elapsed = time.monotonic() - start
+            if timeout is not None and elapsed >= timeout:
+                self._cancel(tid)
+                raise LimitExceeded(timeout)
+                
+            sleep_time = min(delay, 0.05)
+            if timeout is not None:
+                sleep_time = min(sleep_time, max(0.0, timeout - elapsed))
+                
             try:
-                await asyncio.sleep(delay)
+                await asyncio.sleep(sleep_time)
             except BaseException:
-                with self.lock:
-                    self.tokens = min(self.burst, self.tokens + 1)
+                self._cancel(tid)
                 raise
-        return True
 
     def __call__(self, fn):
         if inspect.iscoroutinefunction(fn):

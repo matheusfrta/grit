@@ -1,7 +1,7 @@
 import random
 import time
 
-from grit import breaker, constant, fallback, policy, retry, timeout
+from grit import breaker, constant, fallback, policy, retry, timeout, singleflight
 
 db = breaker(fails=3, reset_after=10, name="postgres")
 
@@ -17,6 +17,7 @@ def alert(name, state):
     retry(tries=3, wait=constant(0.2), on=ConnectionError),
     db,
 )
+@singleflight(key=lambda: "users")
 def list_users():
     if random.random() < 0.7:
         raise ConnectionError("db is down")

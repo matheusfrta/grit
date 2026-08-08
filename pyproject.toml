@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "grit-toolkit"
-version = "0.1.1"
-description = "resilience toolkit: retry, circuit breaker, timeout, rate limit, bulkhead, fallback"
+version = "0.2.0"
+description = "resilience toolkit: retry, circuit breaker, timeout, rate limit, bulkhead, fallback, hedge, singleflight"
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = []
