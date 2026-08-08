@@ -47,15 +47,26 @@ class limiter:
             raise LimitExceeded(timeout)
             
         if delay > 0:
-            time.sleep(delay)
+            try:
+                time.sleep(delay)
+            except BaseException:
+                with self.lock:
+                    self.tokens = min(self.burst, self.tokens + 1)
+                raise
         return True
 
     async def acquire_async(self, timeout=None):
         delay = self._take(timeout)
         if delay < 0:
             raise LimitExceeded(timeout)
+            
         if delay > 0:
-            await asyncio.sleep(delay)
+            try:
+                await asyncio.sleep(delay)
+            except BaseException:
+                with self.lock:
+                    self.tokens = min(self.burst, self.tokens + 1)
+                raise
         return True
 
     def __call__(self, fn):
