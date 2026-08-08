@@ -17,11 +17,11 @@ class bulkhead:
         if self._asem is None:
             self._asem = asyncio.Semaphore(self.size)
         sem = self._asem
+
         if self.timeout is None:
-            if sem._value <= 0:
-                return False
             await sem.acquire()
             return True
+
         try:
             await asyncio.wait_for(sem.acquire(), self.timeout)
             return True

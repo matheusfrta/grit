@@ -1,4 +1,5 @@
 import random
+import threading
 
 
 def constant(base=1.0):
@@ -32,8 +33,10 @@ def jitter(fn, spread=1.0):
 
 def decorr(base=1.0, cap=60.0):
     state = {"prev": base}
+    lock = threading.Lock()
 
     def wait(attempt):
-        state["prev"] = min(cap, random.uniform(base, state["prev"] * 3))
-        return state["prev"]
+        with lock:
+            state["prev"] = min(cap, random.uniform(base, state["prev"] * 3))
+            return state["prev"]
     return wait

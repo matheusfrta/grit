@@ -20,6 +20,7 @@ class breaker:
         self.state = CLOSED
         self.count = 0
         self.half_ok = 0
+        self.half_pending = 0
         self.opened_at = 0.0
         self.lock = threading.Lock()
         self.listeners = []
@@ -34,38 +35,45 @@ class breaker:
 
     def _before(self):
         with self.lock:
-            if self.state != OPEN:
-                return
-            left = self.reset_after - (time.monotonic() - self.opened_at)
-            if left > 0:
-                raise BreakerOpen(self.name, left)
-            self.state = HALF
-            self.half_ok = 0
-            self._emit()
+            if self.state == OPEN:
+                left = self.reset_after - (time.monotonic() - self.opened_at)
+                if left > 0:
+                    raise BreakerOpen(self.name, left)
+                self.state = HALF
+                self.half_ok = 0
+                self.half_pending = 1
+                self._emit()
+            elif self.state == HALF:
+                if self.half_pending >= self.success_threshold:
+                    raise BreakerOpen(self.name, 0.0)
+                self.half_pending += 1
 
     def _success(self):
         with self.lock:
             if self.state == HALF:
+                self.half_pending = max(0, self.half_pending - 1)
                 self.half_ok += 1
                 if self.half_ok >= self.success_threshold:
                     self.state = CLOSED
                     self.count = 0
                     self._emit()
-            else:
+            elif self.state == CLOSED:
                 self.count = 0
 
     def _failure(self):
         with self.lock:
             if self.state == HALF:
+                self.half_pending = max(0, self.half_pending - 1)
                 self.state = OPEN
                 self.opened_at = time.monotonic()
                 self._emit()
                 return
-            self.count += 1
-            if self.count >= self.fails:
-                self.state = OPEN
-                self.opened_at = time.monotonic()
-                self._emit()
+            if self.state == CLOSED:
+                self.count += 1
+                if self.count >= self.fails:
+                    self.state = OPEN
+                    self.opened_at = time.monotonic()
+                    self._emit()
 
     def __call__(self, fn):
         if inspect.iscoroutinefunction(fn):
